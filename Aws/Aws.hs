@@ -109,7 +109,7 @@ dbgConfiguration = do
 --
 -- All errors are caught and wrapped in the 'Response' value.
 --
--- Metadata is logged at level 'Info'.
+-- Metadata is logged at level 'Debug'.
 --
 -- Usage (with existing 'HTTP.Manager'):
 -- @
@@ -147,7 +147,7 @@ awsRef = unsafeAwsRef
 
 -- | Run an AWS transaction, with HTTP manager and without metadata.
 --
--- Metadata is logged at level 'Info'.
+-- Metadata is logged at level 'Debug'.
 --
 -- Usage (with existing 'HTTP.Manager'):
 -- @
@@ -163,7 +163,7 @@ pureAws cfg scfg mgr req = readResponseIO =<< aws cfg scfg mgr req
 
 -- | Run an AWS transaction, with HTTP manager and without metadata.
 --
--- Metadata is logged at level 'Info'.
+-- Metadata is logged at level 'Debug'.
 --
 -- Usage (with existing 'HTTP.Manager'):
 -- @
@@ -179,7 +179,7 @@ memoryAws cfg scfg mgr req = liftIO $ runResourceT $ loadToMemory =<< readRespon
 
 -- | Run an AWS transaction, /without/ HTTP manager and without metadata.
 --
--- Metadata is logged at level 'Info'.
+-- Metadata is logged at level 'Debug'.
 --
 -- Note that this is potentially less efficient than using 'aws', because HTTP connections cannot be re-used.
 --
@@ -202,7 +202,7 @@ simpleAws cfg scfg request = liftIO $ runResourceT $ do
 --
 -- All errors are caught and wrapped in the 'Response' value.
 --
--- Metadata is wrapped in the Response, and also logged at level 'Info'.
+-- Metadata is wrapped in the Response, and also logged at level 'Debug'.
 unsafeAws
   :: (ResponseConsumer r a,
       Loggable (ResponseMetadata a),
@@ -217,7 +217,7 @@ unsafeAws cfg scfg manager request = do
   resp <- catchAll $
             unsafeAwsRef cfg scfg manager metadataRef request
   metadata <- liftIO $ readIORef metadataRef
-  liftIO $ logger cfg Info $ "Response metadata: " `mappend` toLogText metadata
+  liftIO $ logger cfg Debug $ "Response metadata: " `mappend` toLogText metadata
   return $ Response metadata resp
 
 -- | Run an AWS transaction, without enforcing that response and request type form a valid transaction pair.
