@@ -7,13 +7,14 @@ import           Control.Monad
 import           Control.Monad.IO.Class
 import           Control.Monad.Trans.Resource   (MonadThrow, throwM)
 import           Data.Char                      (isAscii, isAlphaNum, toUpper, ord)
-import           Data.Conduit                   (($$+-))
+import           Data.Conduit                   ((.|))
 import           Data.Function
 import           Data.Functor                   ((<$>))
 import           Data.IORef
 import           Data.List
 import           Data.Maybe
 import           Data.Monoid
+import qualified Data.Semigroup                 as Sem
 import           Control.Applicative            ((<|>))
 import           Data.Time
 import           Data.Typeable
@@ -164,9 +165,12 @@ data S3Metadata
       }
     deriving (Show, Typeable)
 
+instance Sem.Semigroup S3Metadata where
+    S3Metadata a1 r1 <> S3Metadata a2 r2 = S3Metadata (a1 `mplus` a2) (r1 `mplus` r2)
+
 instance Monoid S3Metadata where
     mempty = S3Metadata Nothing Nothing
-    S3Metadata a1 r1 `mappend` S3Metadata a2 r2 = S3Metadata (a1 `mplus` a2) (r1 `mplus` r2)
+    mappend = (Sem.<>)
 
 instance Loggable S3Metadata where
     toLogText (S3Metadata id2 rid) = "S3: request ID=" `mappend`
@@ -337,7 +341,7 @@ s3SignQuery S3Query{..} S3Configuration{ s3SignVersion = S3SignV4 signpayload, .
             , mconcat . catMaybes $ path             -- path
             , s3RenderQuery False $ sort queryString -- query string
             ] ++
-            Map.foldMapWithKey (\a b -> [CI.foldedCase a <> ":" <> b]) canonicalHeaders ++
+            Map.foldMapWithKey (\a b -> [CI.foldedCase a Sem.<> ":" Sem.<> b]) canonicalHeaders ++
             [ "" -- end headers
             , signedHeaders
             , amzHeaders Map.! hAmzContentSha256
@@ -392,8 +396,8 @@ s3RenderQuery qm = mconcat . qmf . intersperse (B8.singleton '&') . map renderIt
         qmf = if qm then ("?":) else id
 
         renderItem :: HTTP.QueryItem -> B8.ByteString
-        renderItem (k, Just v) = s3UriEncode True k <> "=" <> s3UriEncode True v
-        renderItem (k, Nothing) = s3UriEncode True k <> "="
+        renderItem (k, Just v) = s3UriEncode True k Sem.<> "=" Sem.<> s3UriEncode True v
+        renderItem (k, Nothing) = s3UriEncode True k Sem.<> "="
 
 -- | see: <http://docs.aws.amazon.com/general/latest/gr/rande.html#s3_region>
 s3ExtractRegion :: B.ByteString -> B.ByteString
@@ -418,7 +422,6 @@ s3ResponseConsumer inner metadataRef = s3BinaryResponseConsumer inner' metadataR
   where inner' resp =
           do
             !res <- inner resp
-            C.closeResumableSource (HTTP.responseBody resp)
             return res
 
 s3BinaryResponseConsumer :: HTTPResponseConsumer a
@@ -444,7 +447,7 @@ s3XmlResponseConsumer parse metadataRef =
 
 s3ErrorResponseConsumer :: HTTPResponseConsumer a
 s3ErrorResponseConsumer resp
-    = do doc <- HTTP.responseBody resp $$+- XML.sinkDoc XML.def
+    = do doc <- C.runConduit $ HTTP.responseBody resp .| XML.sinkDoc XML.def
          let cursor = Cu.fromDocument doc
          liftIO $ case parseError cursor of
            Right err      -> throwM err
@@ -458,7 +461,7 @@ s3ErrorResponseConsumer resp
                                accessKeyId = listToMaybe $ root $/ elContent "AWSAccessKeyId"
                                bucket = listToMaybe $ root $/ elContent "Bucket"
                                endpointRaw = listToMaybe $ root $/ elContent "Endpoint"
-                               endpoint = T.encodeUtf8 <$> (T.stripPrefix (fromMaybe "" bucket <> ".") =<< endpointRaw)
+                               endpoint = T.encodeUtf8 <$> (T.stripPrefix (fromMaybe "" bucket Sem.<> ".") =<< endpointRaw)
                                stringToSign = do unprocessed <- listToMaybe $ root $/ elCont "StringToSignBytes"
                                                  bytes <- mapM readHex2 $ words unprocessed
                                                  return $ B.pack bytes

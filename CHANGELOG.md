@@ -1,3 +1,19 @@
+0.20 series
+-----------
+
+-   0.20
+    - Update to conduit 1.3 and http-conduit 2.3 (breaking API change
+      due to removal of ResumableSource, which was used in public APIs)
+    - S3: Fix to V2 string signing
+
+0.19 series
+-----------
+
+-   0.19
+    - Experimental support for V4 signing
+    - Add "eu-west-2" endpoint for some services
+    - Loosen http-conduit bounds
+
 0.18 series
 -----------
 
