@@ -153,6 +153,7 @@ data S3Error
       , s3ErrorBucket :: Maybe T.Text -- Error/Bucket
       , s3ErrorEndpointRaw :: Maybe T.Text -- Error/Endpoint (i.e. correct bucket location)
       , s3ErrorEndpoint :: Maybe B.ByteString -- Error/Endpoint without the bucket prefix
+      , s3ErrorNotSign :: Maybe T.Text -- Error/HeadersNotSigned
       }
     deriving (Show, Typeable)
 
@@ -458,6 +459,7 @@ s3ErrorResponseConsumer resp
                            message <- force "Missing error Message" $ root $/ elContent "Message"
                            let resource = listToMaybe $ root $/ elContent "Resource"
                                hostId = listToMaybe $ root $/ elContent "HostId"
+                               notSign = listToMaybe $ root $/ elContent "HeadersNotSigned"
                                accessKeyId = listToMaybe $ root $/ elContent "AWSAccessKeyId"
                                bucket = listToMaybe $ root $/ elContent "Bucket"
                                endpointRaw = listToMaybe $ root $/ elContent "Endpoint"
@@ -476,6 +478,7 @@ s3ErrorResponseConsumer resp
                                       , s3ErrorBucket = bucket
                                       , s3ErrorEndpointRaw = endpointRaw
                                       , s3ErrorEndpoint = endpoint
+                                      , s3ErrorNotSign = notSign
                                       }
 
 type CanonicalUserId = T.Text
