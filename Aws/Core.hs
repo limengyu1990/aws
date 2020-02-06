@@ -528,13 +528,14 @@ queryToUri SignedQuery{..}
 -- | Whether to restrict the signature validity with a plain timestamp, or with explicit expiration
 -- (absolute or relative).
 data TimeInfo
-    = Timestamp                                      -- ^ Use a simple timestamp to let AWS check the request validity.
-    | ExpiresAt { fromExpiresAt :: UTCTime }         -- ^ Let requests expire at a specific fixed time.
+    = Timestamp                                      -- ^ Use a simple timestamp to let AWS check the request validity. 使用简单的时间戳记让AWS检查请求的有效性。
+    | ExpiresAt { fromExpiresAt :: UTCTime }         -- ^ Let requests expire at a specific fixed time. 让请求在特定的固定时间到期。
     | ExpiresIn { fromExpiresIn :: NominalDiffTime } -- ^ Let requests expire a specific number of seconds after they
-                                                     -- were generated.
+                                                     -- were generated. 让请求在生成请求后特定的秒数过期。
     deriving (Show)
 
 -- | Like 'TimeInfo', but with all relative times replaced by absolute UTC.
+-- | 类似于'TimeInfo'，但所有相对时间都由绝对UTC代替。
 data AbsoluteTimeInfo
     = AbsoluteTimestamp { fromAbsoluteTimestamp :: UTCTime }
     | AbsoluteExpires { fromAbsoluteExpires :: UTCTime }
@@ -552,17 +553,18 @@ makeAbsoluteTimeInfo (ExpiresAt t) _   = AbsoluteExpires t
 makeAbsoluteTimeInfo (ExpiresIn s) now = AbsoluteExpires $ addUTCTime s now
 
 -- | Data that is always required for signing requests.
+-- | 签名请求始终需要的数据
 data SignatureData
     = SignatureData {
-        -- | Expiration or timestamp.
+        -- | Expiration or timestamp. 到期或时间戳。
         signatureTimeInfo :: AbsoluteTimeInfo
         -- | Current time.
       , signatureTime :: UTCTime
-        -- | Access credentials.
+        -- | Access credentials. 访问凭证。
       , signatureCredentials :: Credentials
       }
 
--- | Create signature data using the current system time.
+-- | Create signature data using the current system time. 使用当前系统时间创建签名数据。
 signatureData :: TimeInfo -> Credentials -> IO SignatureData
 signatureData rti cr = do
   now <- getCurrentTime
@@ -605,6 +607,7 @@ signature cr ah input = Base64.encode sig
 
 
 -- | Generates the Credential string, required for V4 signatures.
+-- | 生成V4签名所需的凭据字符串。
 credentialV4
     :: SignatureData
     -> B.ByteString -- ^ region, e.g. us-east-1
@@ -626,13 +629,17 @@ credentialV4 sd region service = B.concat
 -- | Use this to create the Authorization header to set into 'sqAuthorization'.
 -- See <http://docs.aws.amazon.com/general/latest/gr/signature-version-4.html>: you must create the
 -- canonical request as explained by Step 1 and this function takes care of Steps 2 and 3.
+-- 您必须按照步骤1的说明创建规范请求，并且此功能将执行步骤2 和3。
+-- 1.创建规范请求。
+-- 2.使用规范请求和其他元数据来创建供签署的字符串。
+-- 3.从您的 AWS 秘密访问密钥派生签名密钥。然后将该签名密钥与在上一步中创建的字符串结合使用来创建签名。
 authorizationV4 :: SignatureData
                 -> AuthorizationHash
                 -> B.ByteString -- ^ region, e.g. us-east-1
                 -> B.ByteString -- ^ service, e.g. dynamodb
                 -> B.ByteString -- ^ SignedHeaders, e.g. content-type;host;x-amz-date;x-amz-target
                 -> B.ByteString -- ^ canonicalRequest (before hashing)
-                -> IO B.ByteString
+                -> IO B.ByteString -- ^ Header`Authorization`的值
 authorizationV4 sd ah region service headers canonicalRequest = do
     let ref = v4SigningKeys $ signatureCredentials sd
         date = fmtTime "%Y%m%d" $ signatureTime sd
@@ -645,6 +652,7 @@ authorizationV4 sd ah region service headers canonicalRequest = do
             Nothing -> Nothing
 
     -- possibly create a new signing key
+    -- 新生成一個签名密钥((region,service),(date,sign-key))
     let createNewKey = atomicModifyIORef ref $ \keylist ->
             let kSigning = signingKeyV4 sd ah region service
                 lstK     = (region,service)
@@ -652,9 +660,9 @@ authorizationV4 sd ah region service headers canonicalRequest = do
              in (keylist', kSigning)
 
     -- finally, return the header
-    constructAuthorizationV4Header sd ah region service headers
-         .  signatureV4WithKey sd ah region service canonicalRequest
-        <$> maybe createNewKey return mkey
+    constructAuthorizationV4Header sd ah region service headers       -- 生成Header`Authorization`的值
+         .  signatureV4WithKey sd ah region service canonicalRequest  -- 計算v4簽名
+        <$> maybe createNewKey return mkey -- 從緩存獲取或生成签名密钥
 
 -- | IO free version of @authorizationV4@, use this if you need
 -- to compute the signature outside of IO.
@@ -670,6 +678,7 @@ authorizationV4' sd ah region service headers canonicalRequest
     = constructAuthorizationV4Header sd ah region service headers
         $ signatureV4 sd ah region service canonicalRequest
 
+-- 構造Header`Authorization`的值
 constructAuthorizationV4Header
     :: SignatureData
     -> AuthorizationHash
@@ -692,14 +701,14 @@ constructAuthorizationV4Header sd ah region service headers sig = B.concat
             HmacSHA1 -> "AWS4-HMAC-SHA1"
             HmacSHA256 -> "AWS4-HMAC-SHA256"
 
--- | Compute the signature for V4
+-- | Compute the signature for V4 计算V4的签名
 signatureV4WithKey
     :: SignatureData
     -> AuthorizationHash
     -> B.ByteString -- ^ region, e.g. us-east-1
     -> B.ByteString -- ^ service, e.g. dynamodb
     -> B.ByteString -- ^ canonicalRequest (before hashing)
-    -> B.ByteString -- ^ signing key
+    -> B.ByteString -- ^ signing key 签名密钥
     -> B.ByteString
 signatureV4WithKey sd ah region service canonicalRequest key = Base16.encode $ mkHmac key stringToSign
     where
@@ -716,6 +725,7 @@ signatureV4WithKey sd ah region service canonicalRequest key = Base16.encode $ m
 
         -- now do the signature
         canonicalRequestHash = Base16.encode $ mkHash canonicalRequest
+        -- 2.使用规范请求和其他元数据来创建供签署的字符串
         stringToSign = B.concat
             [ alg
             , "\n"
@@ -730,6 +740,8 @@ signatureV4WithKey sd ah region service canonicalRequest key = Base16.encode $ m
             , canonicalRequestHash
             ]
 
+-- 从AWS秘密访问密钥(secretKey)派生签名密钥(sign-key)
+-- 3.从您的 AWS 秘密访问密钥派生签名密钥。然后将该签名密钥与在上一步中创建的字符串结合使用来创建签名。
 signingKeyV4
     :: SignatureData
     -> AuthorizationHash
@@ -748,12 +760,13 @@ signingKeyV4 sd ah region service = kSigning
         kService = mkHmac kRegion service
         kSigning = mkHmac kService "aws4_request"
 
+-- 计算V4的签名
 signatureV4
     :: SignatureData
     -> AuthorizationHash
     -> B.ByteString -- ^ region, e.g. us-east-1
     -> B.ByteString -- ^ service, e.g. dynamodb
-    -> B.ByteString -- ^ canonicalRequest (before hashing)
+    -> B.ByteString -- ^ canonicalRequest (before hashing) 规范请求（hashing之前）
     -> B.ByteString
 signatureV4 sd ah region service canonicalRequest
     = signatureV4WithKey sd ah region service canonicalRequest

@@ -62,8 +62,8 @@ data LogLevel
     | Error
     deriving (Show, Eq, Ord)
 
--- | The interface for any logging function. Takes log level and a log message, and can perform an arbitrary
--- IO action.
+-- | The interface for any logging function.Takes log level and a log message, and can perform an arbitrary
+-- IO action.任何日志记录函数的接口,获取日志级别和日志消息,并可以执行任意IO操作.
 type Logger = LogLevel -> T.Text -> IO ()
 
 -- | The default logger @defaultLog minLevel@, which prints log messages above level @minLevel@ to @stderr@.
@@ -71,14 +71,14 @@ defaultLog :: LogLevel -> Logger
 defaultLog minLevel lev t | lev >= minLevel = T.hPutStrLn stderr $ T.concat [T.pack $ show lev, ": ", t]
                           | otherwise       = return ()
 
--- | The configuration for an AWS request. You can use multiple configurations in parallel, even over the same HTTP
--- connection manager.
+-- | The configuration for an AWS request.You can use multiple configurations in parallel, even over the same HTTP
+-- connection manager.AWS请求的配置,即使在同一HTTP连接管理器上,您也可以并行使用多个配置
 data Configuration
     = Configuration {
         -- | Whether to restrict the signature validity with a plain timestamp, or with explicit expiration
-        -- (absolute or relative).
+        -- (absolute or relative).是否使用普通时间戳或明确到期(绝对或相对)限制签名有效性
         timeInfo    :: TimeInfo
-        -- | AWS access credentials.
+        -- | AWS access credentials.AWS访问凭证
       , credentials :: Credentials
         -- | The error / message logger.
       , logger      :: Logger
@@ -86,7 +86,7 @@ data Configuration
       }
 
 -- | The default configuration, with credentials loaded from environment variable or configuration file
--- (see 'loadCredentialsDefault').
+-- (see 'loadCredentialsDefault').默认配置,其中包含从环境变量或配置文件加载的凭据(参见'loadCredentialsDefault')
 baseConfiguration :: MonadIO io => io Configuration
 baseConfiguration = liftIO $ do
   cr <- loadCredentialsDefault
@@ -99,7 +99,7 @@ baseConfiguration = liftIO $ do
                     , proxy = Nothing
                     }
 
--- | Debug configuration, which logs much more verbosely.
+-- | Debug configuration, which logs much more verbosely.调试配置,更详细地记录日志
 dbgConfiguration :: MonadIO io => io Configuration
 dbgConfiguration = do
   c <- baseConfiguration
@@ -212,7 +212,7 @@ unsafeAws cfg scfg manager request = do
   metadataRef <- liftIO $ newIORef mempty
 
   let catchAll :: ResourceT IO a -> ResourceT IO (Either E.SomeException a)
-      catchAll = E.handle (return . Left) . fmap Right
+      catchAll = E.handle (return .Left) .fmap Right
 
   resp <- catchAll $
             unsafeAwsRef cfg scfg manager metadataRef request
@@ -234,7 +234,7 @@ unsafeAwsRef
 unsafeAwsRef cfg info manager metadataRef request = do
   sd <- liftIO $ signatureData <$> timeInfo <*> credentials $ cfg
   let !q = {-# SCC "unsafeAwsRef:signQuery" #-} signQuery request info sd
-  let logDebug = liftIO . logger cfg Debug . T.pack
+  let logDebug = liftIO .logger cfg Debug .T.pack
   logDebug $ "String to sign: " ++ show (sqStringToSign q)
   !httpRequest <- {-# SCC "unsafeAwsRef:httpRequest" #-} liftIO $ do
     req <- queryToHttpRequest q
@@ -253,7 +253,7 @@ unsafeAwsRef cfg info manager metadataRef request = do
     logger cfg Debug $ T.decodeUtf8 $ "Response header '" `mappend` CI.original hname `mappend` "': '" `mappend` hvalue `mappend` "'"
   {-# SCC "unsafeAwsRef:responseConsumer" #-} responseConsumer httpRequest request metadataRef hresp
 
--- | Run a URI-only AWS transaction. Returns a URI that can be sent anywhere. Does not work with all requests.
+-- | Run a URI-only AWS transaction.Returns a URI that can be sent anywhere.Does not work with all requests.
 --
 -- Usage:
 -- @
@@ -265,12 +265,14 @@ awsUri cfg info request = liftIO $ do
   let ti = timeInfo cfg
       cr = credentials cfg
   sd <- signatureData ti cr
+  -- 生成簽名數據
   let q = signQuery request info sd
   logger cfg Debug $ T.pack $ "String to sign: " ++ show (sqStringToSign q)
+  logger cfg Debug $ T.pack $ "String to sqAmzHeaders: " ++ show (sqAmzHeaders q)
   return $ queryToUri q
 
 {-
--- | Run an iterated AWS transaction. May make multiple HTTP requests.
+-- | Run an iterated AWS transaction.May make multiple HTTP requests.
 awsIteratedAll :: (IteratedTransaction r a)
                   => Configuration
                   -> ServiceConfiguration r NormalQuery
@@ -318,7 +320,7 @@ awsIteratedList cfg scfg manager req = awsIteratedList' run req
 
 -------------------------------------------------------------------------------
 -- | A more flexible version of 'awsIteratedSource' that uses a
--- user-supplied run function. Useful for embedding AWS functionality
+-- user-supplied run function.Useful for embedding AWS functionality
 -- within application specific monadic contexts.
 awsIteratedSource'
     :: (Monad m, IteratedTransaction r a)
@@ -339,7 +341,7 @@ awsIteratedSource' run r0 = go r0
 
 -------------------------------------------------------------------------------
 -- | A more flexible version of 'awsIteratedList' that uses a
--- user-supplied run function. Useful for embedding AWS functionality
+-- user-supplied run function.Useful for embedding AWS functionality
 -- within application specific monadic contexts.
 awsIteratedList'
     :: (Monad m, IteratedTransaction r b, ListResponse b c)

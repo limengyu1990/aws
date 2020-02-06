@@ -331,12 +331,15 @@ s3SignQuery S3Query{..} S3Configuration{ s3SignVersion = S3SignV4 signpayload, .
             where
                 urlEncodedS3QObject = s3UriEncode False <$> s3QObject
 
-        -- must provide host in the canonical headers.
+        -- must provide host in the canonical headers. 必须在规范headers中提供主机.
         canonicalHeaders = Map.union amzHeaders . Map.fromList $ catMaybes
             [ Just ("host", B.intercalate "." $ catMaybes host)
             , ("content-type",) <$> s3QContentType
+            , ("content-md5", ) <$> maybe Nothing (Just . B8.pack . show) s3QContentMd5
             ]
         signedHeaders = B8.intercalate ";" (map CI.foldedCase $ Map.keys canonicalHeaders)
+
+        -- 規範請求 字符串
         stringToSign = B.intercalate "\n" $
             [ httpMethod s3QMethod                   -- method
             , mconcat . catMaybes $ path             -- path
@@ -344,7 +347,7 @@ s3SignQuery S3Query{..} S3Configuration{ s3SignVersion = S3SignV4 signpayload, .
             ] ++
             Map.foldMapWithKey (\a b -> [CI.foldedCase a Sem.<> ":" Sem.<> b]) canonicalHeaders ++
             [ "" -- end headers
-            , signedHeaders
+            , signedHeaders -- 已簽名headers
             , amzHeaders Map.! hAmzContentSha256
             ]
 
@@ -364,7 +367,9 @@ s3SignQuery S3Query{..} S3Configuration{ s3SignVersion = S3SignV4 signpayload, .
             where
                 allQueries = s3QSubresources ++ s3QQuery
                 region = s3ExtractRegion s3Endpoint
+                -- header'Authorization'的值
                 auth = authorizationV4 sd HmacSHA256 region "s3" signedHeaders stringToSign
+                -- 计算V4的签名
                 sig  = signatureV4     sd HmacSHA256 region "s3"               stringToSign
                 cred = credentialV4    sd            region "s3"
                 ti = case (s3UseUri, signatureTimeInfo) of
@@ -518,8 +523,8 @@ writeCannedAcl AclLogDeliveryWrite       = "log-delivery-write"
 
 data StorageClass
     = Standard
-    | StandardInfrequentAccess
-    | ReducedRedundancy
+    | StandardInfrequentAccess -- 标准不经常访问
+    | ReducedRedundancy        -- 减少冗余
     | Glacier
     | OtherStorageClass T.Text
     deriving (Show)
