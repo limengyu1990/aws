@@ -335,7 +335,7 @@ s3SignQuery S3Query{..} S3Configuration{ s3SignVersion = S3SignV4 signpayload, .
         canonicalHeaders = Map.union amzHeaders . Map.fromList $ catMaybes
             [ Just ("host", B.intercalate "." $ catMaybes host)
             , ("content-type",) <$> s3QContentType
-            , ("content-md5", ) <$> maybe Nothing (Just . B8.pack . show) s3QContentMd5
+            -- , ("content-md5", ) <$> maybe Nothing (Just . B8.pack . show) s3QContentMd5
             ]
         signedHeaders = B8.intercalate ";" (map CI.foldedCase $ Map.keys canonicalHeaders)
 
